@@ -1,0 +1,24 @@
+# Java compiled files
+*.class
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Runtime / generated persistence files
+redis.aof
+redis.snapshot
+
+# Backup files
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+redis-data.txt
