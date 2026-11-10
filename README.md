@@ -1,52 +1,42 @@
-# 🚀 Build Your Own Redis in Java
+# Build Your Own Redis in Java
 
-A lightweight, Redis-inspired in-memory key-value server built from scratch in Java to understand how a real data store works internally — including TCP networking, concurrent clients, TTL, persistence, caching, transactions, Pub/Sub, and multiple data structures.
-
-> **Built from scratch in Java — without using Redis as the backend.**
+A lightweight, Redis-inspired in-memory key-value server built from scratch in Java to implement core distributed systems concepts—including TCP networking, concurrent client handling, TTL expiration, persistence, LRU caching, transactions, and Pub/Sub.
 
 ---
 
-## 🎯 Why I Built This
+## Terminal Demo
 
-Instead of only using Redis as a developer tool, I wanted to understand what happens **behind the commands**.
-
-This project explores the core engineering ideas behind a Redis-like server:
-
-* How clients communicate with a server over TCP
-* How commands are parsed and executed
-* How multiple clients can work concurrently
-* How data can expire automatically
-* How data survives server restarts
-* How caching can improve repeated reads
-* How transactions and Pub/Sub work
-* How thread safety is handled in a shared in-memory system
+*(Tip: GitHub editor mein apne terminal ka 30-second video ya screenshot yahan drag-and-drop kar dein jisme server aur 2 clients ek saath chal rahe hon)*
 
 ---
 
-## ✨ Features
+## Core Engineering Highlights
 
-| Feature              | Implementation                             |
-| -------------------- | ------------------------------------------ |
-| `SET / GET`          | String key-value storage                   |
-| `DEL / EXISTS`       | Key management                             |
-| `EXPIRE / TTL`       | Time-based key expiration                  |
-| `LIST`               | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE` |
-| `HASH`               | `HSET`, `HGET`, `HDEL`, `HGETALL`          |
-| `SET`                | `SADD`, `SREM`, `SISMEMBER`, `SMEMBERS`    |
-| TCP Networking       | Java `ServerSocket` / `Socket`             |
-| Multiple Clients     | Thread pool                                |
-| Thread Safety        | Synchronized engine operations             |
-| LRU Cache            | `LinkedHashMap` access-order cache         |
-| AOF Persistence      | Append-only command log                    |
-| Snapshot Persistence | File-based database snapshots              |
-| Transactions         | `MULTI`, `EXEC`, `DISCARD`                 |
-| Pub/Sub              | `SUBSCRIBE`, `PUBLISH`, `UNSUBSCRIBE`      |
-| Command Parser       | Validation + error handling                |
-| Recovery             | State restoration after restart            |
+- **TCP Client-Server Protocol:** Built custom socket communication over port `6379` using Java `ServerSocket` and `Socket` APIs.
+- **Concurrent Request Handling:** Managed multiple simultaneous client connections using a fixed thread pool (`Executors.newFixedThreadPool(10)`).
+- **Thread-Safe Shared State:** Prevented race conditions across threads using `ConcurrentHashMap`, `ConcurrentHashMap.newKeySet()`, and synchronized critical sections.
+- **Dual Persistence & Recovery:** Implemented Append-Only File (`redis.aof`) command logging and point-in-time `SAVE` snapshots (`redis.snapshot`) with TTL restoration across server restarts.
+- **LRU Read Caching:** Added a bounded 100-entry Least Recently Used (LRU) cache using access-ordered `LinkedHashMap` to accelerate repeated reads.
+- **ACID-Inspired Transactions & Pub/Sub:** Built command queuing (`MULTI`, `EXEC`, `DISCARD`) and real-time message broadcasting (`SUBSCRIBE`, `PUBLISH`, `UNSUBSCRIBE`).
 
 ---
 
-## 🏗️ Architecture
+## Supported Commands & Features
+
+| Category | Commands / Mechanism | Description |
+| :--- | :--- | :--- |
+| **Strings** | `SET`, `GET`, `DEL`, `EXISTS` | Basic key-value storage, lookup, and deletion |
+| **Expiration** | `EXPIRE`, `TTL` | Time-based key expiration with lazy/active timestamp checks |
+| **Lists** | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE` | Doubly-linked list operations for queues and stacks |
+| **Hashes** | `HSET`, `HGET`, `HDEL`, `HGETALL` | Field-value map storage for structured objects |
+| **Sets** | `SADD`, `SREM`, `SISMEMBER`, `SMEMBERS` | Unordered unique string collections |
+| **Transactions** | `MULTI`, `EXEC`, `DISCARD` | Atomic batch execution and rollback of queued commands |
+| **Pub/Sub** | `SUBSCRIBE`, `PUBLISH`, `UNSUBSCRIBE` | Channel-based real-time messaging across clients |
+| **Persistence** | `SAVE`, AOF Replay | Crash recovery via snapshot loading and AOF log replay |
+
+---
+
+## System Architecture
 
 ```text
                     ┌──────────────────────┐
@@ -54,14 +44,14 @@ This project explores the core engineering ideas behind a Redis-like server:
                     │   CLI / TCP Client   │
                     └──────────┬───────────┘
                                │
-                               │ TCP
+                               │ TCP (Port 6379)
                                ▼
                     ┌──────────────────────┐
                     │     RedisServer      │
                     │    ServerSocket      │
                     └──────────┬───────────┘
                                │
-                     Thread Pool / Workers
+                     Thread Pool (10 Workers)
                                │
                                ▼
                     ┌──────────────────────┐
@@ -85,8 +75,8 @@ This project explores the core engineering ideas behind a Redis-like server:
        │   LRU Cache  │                  │ Persistence  │
        │              │                  │              │
        │ Fast Reads   │                  │ AOF          │
-       └──────────────┘                  │ Snapshot     │
-                                         └──────────────┘
+       │ (Cap: 100)   │                  │ Snapshot     │
+       └──────────────┘                  └──────────────┘
 
               Additional Components
               ├── TransactionManager
@@ -98,9 +88,7 @@ This project explores the core engineering ideas behind a Redis-like server:
 
 ---
 
-## 🔄 Request Flow
-
-A typical request follows this path:
+## Request Execution Flow
 
 ```text
 Client
@@ -113,17 +101,16 @@ TCP Socket
 ClientHandler
   │
   ▼
-Command Parser
+Command Parser (Validation & Error Handling)
   │
   ▼
-RedisEngine
-  │
-  ├── Update in-memory state
-  ├── Update LRU cache
-  └── Append command to AOF
+RedisEngine (Thread-Safe Execution)
+  ├── 1. Update in-memory data store
+  ├── 2. Update LRU cache
+  └── 3. Append mutation command to redis.aof
   │
   ▼
-Response
+Response ("OK")
   │
   ▼
 Client
@@ -131,520 +118,153 @@ Client
 
 ---
 
-## 🧠 Core Technical Concepts
+## Core Technical Concepts
 
-### 1. TCP Client-Server Communication
+### 1. Concurrency & Thread Safety
+- Uses `Executors.newFixedThreadPool(10)` so incoming TCP connections are handled concurrently without unbounded thread creation.
+- Shared mutable state inside `RedisEngine` is protected via thread-safe collections (`ConcurrentHashMap`) and synchronized blocks to ensure data consistency under multi-client load.
 
-The server uses Java networking APIs:
+### 2. TTL & Expiration States
+- Keys store exact expiration epoch timestamps and validate expiration on access.
+- `TTL <key>` returns standard Redis status codes:
+  - `-1`: Key exists with no expiration set.
+  - `-2`: Key does not exist or has already expired.
+  - `N`: Remaining time-to-live in seconds.
 
-```java
-ServerSocket
-Socket
-```
+### 3. Persistence & Crash Recovery
+- **AOF (`redis.aof`):** Logs every write/mutation command sequentially.
+- **Snapshot (`redis.snapshot`):** Triggered via `SAVE` to serialize current database state and expiration timestamps.
+- **Startup Recovery Sequence:**
+  `Load Snapshot` -> `Restore Expiration Timestamps` -> `Replay AOF Logs` -> `Server Ready`
 
-The server listens on port `6379` and accepts incoming client connections.
-
-Each client is handled independently through the server's thread pool.
-
----
-
-### 2. Concurrent Client Handling
-
-The server uses:
-
-```java
-Executors.newFixedThreadPool(10)
-```
-
-This allows multiple clients to communicate concurrently without creating an unlimited number of threads.
-
-```text
-Client 1 ──┐
-Client 2 ──┤
-Client 3 ──┼──> Thread Pool ──> ClientHandler
-Client 4 ──┤
-Client 5 ──┘
-```
+### 4. LRU Read Cache
+- Implemented using Java's `LinkedHashMap` with `accessOrder = true` and a fixed capacity of 100 entries.
+- `GET` requests check the LRU cache first (`Cache Hit`); on a `Cache Miss`, data is fetched from the main store and cached for subsequent fast reads.
 
 ---
 
-### 3. Thread Safety
+## Command Examples
 
-The shared Redis engine contains mutable state accessed by multiple client threads.
-
-Critical operations are synchronized to prevent inconsistent updates.
-
-The project also uses concurrent collections such as:
-
-```java
-ConcurrentHashMap
-ConcurrentHashMap.newKeySet()
-```
-
----
-
-### 4. TTL / Expiration
-
-Keys can have an expiration time:
-
+### Strings & TTL
 ```text
 SET session Ram
 EXPIRE session 10
 TTL session
+GET session
 ```
 
-The engine stores the expiration timestamp and checks it when accessing the key.
-
-Possible TTL states:
-
+### Lists, Hashes & Sets
 ```text
--1  → Key exists but has no expiration
--2  → Key does not exist / already expired
-N   → Remaining lifetime in seconds
-```
-
----
-
-## 💾 Persistence
-
-The project implements two persistence mechanisms.
-
-### AOF — Append Only File
-
-Commands are recorded in:
-
-```text
-redis.aof
-```
-
-Example:
-
-```text
-SET name Ram
-EXPIREAT session 1760000000000
-DEL oldKey
-```
-
-When the server starts again, the AOF is replayed to reconstruct state.
-
----
-
-### Snapshot Persistence
-
-The project also supports:
-
-```text
-SAVE
-```
-
-which writes the current string database state to:
-
-```text
-redis.snapshot
-```
-
-The snapshot also stores expiration timestamps where applicable.
-
-On restart:
-
-```text
-Snapshot
-   ↓
-Load database
-   ↓
-Restore expiration
-   ↓
-Replay AOF
-   ↓
-Server ready
-```
-
----
-
-## ⚡ LRU Cache
-
-A small LRU cache is implemented using:
-
-```java
-LinkedHashMap
-```
-
-with access-order enabled.
-
-```text
-GET key
-   │
-   ▼
-Check LRU Cache
-   │
-   ├── Hit  → return cached value
-   │
-   └── Miss
-         │
-         ▼
-      Database
-         │
-         ▼
-      Cache value
-```
-
-The cache has a fixed capacity of `100` entries.
-
----
-
-## 🗃️ Supported Data Structures
-
-### Strings
-
-```text
-SET name Ram
-GET name
-DEL name
-EXISTS name
-```
-
-### Lists
-
-```text
+# Lists
 LPUSH fruits apple
 RPUSH fruits mango
 LRANGE fruits 0 -1
-LPOP fruits
-RPOP fruits
-```
 
-### Hashes
-
-```text
+# Hashes
 HSET user name Ram
-HSET user age 21
-HGET user name
+HSET user role SDE
 HGETALL user
-HDEL user age
-```
 
-### Sets
-
-```text
+# Sets
 SADD skills Java
-SADD skills Python
-SISMEMBER skills Java
+SADD skills DSA
 SMEMBERS skills
-SREM skills Java
 ```
 
----
-
-## 🔄 Transactions
-
-The project supports a basic transaction workflow:
-
+### Transactions
 ```text
 MULTI
-SET name Ram
-SET age 21
+SET account_a 500
+SET account_b 1000
 EXEC
 ```
 
-Commands issued between `MULTI` and `EXEC` are queued and executed when `EXEC` is received.
-
-Transactions can also be cancelled:
-
-```text
-MULTI
-SET name Ram
-DISCARD
-```
-
----
-
-## 📡 Pub/Sub
-
-Clients can subscribe to channels:
-
-```text
-SUBSCRIBE news
-```
-
-Another client can publish:
-
-```text
-PUBLISH news Hello
-```
-
-Subscribed clients receive:
-
-```text
-Message [news]: Hello
-```
-
-The project was tested with separate publisher and subscriber clients.
-
----
-
-## 🧪 Testing
-
-The following scenarios were manually verified:
-
-### Basic Operations
-
-```text
-SET → GET → EXISTS → DEL
-```
-
-### Expiration
-
-```text
-SET
-EXPIRE
-TTL
-GET after expiration
-```
-
-Expired keys correctly returned:
-
-```text
-(nil)
-```
-
-### Multiple Clients
-
-A value written by one client was successfully read and updated by another connected client.
-
-### Persistence
-
-Both AOF and snapshot recovery were tested across server restarts.
-
-### TTL Persistence
-
-Expiration timestamps were persisted and restored so that remaining TTL continued after restart.
-
 ### Pub/Sub
+```text
+# Client 1 (Subscriber)
+SUBSCRIBE notifications
 
-Publisher and subscriber clients were tested independently.
-
-### Parser Validation
-
-Invalid commands and invalid numeric arguments return readable errors.
-
----
-
-## 🛠️ Tech Stack
-
-**Language**
-
-* Java
-
-**Networking**
-
-* TCP
-* `ServerSocket`
-* `Socket`
-
-**Concurrency**
-
-* `ExecutorService`
-* Thread Pool
-* `synchronized`
-* `ConcurrentHashMap`
-
-**Data Structures**
-
-* HashMap / ConcurrentHashMap
-* LinkedList
-* HashSet
-* LinkedHashMap
-
-**Persistence**
-
-* File I/O
-* AOF
-* Snapshot
-
-**Development**
-
-* Java Compiler
-* PowerShell
-* Git / GitHub
+# Client 2 (Publisher)
+PUBLISH notifications "Deployment Complete"
+```
 
 ---
 
-## 📁 Project Structure
+## Testing & Verification
+
+- **Multi-Client Concurrency:** Verified simultaneous reads and writes across multiple connected TCP clients without data corruption.
+- **TTL & Restart Recovery:** Verified keys expire accurately and remaining TTL values survive server restarts via Snapshot + AOF replay.
+- **Transaction Atomicity:** Tested command queuing (`MULTI`/`EXEC`) and rollback (`DISCARD`).
+- **Pub/Sub Isolation:** Tested independent publisher and subscriber clients communicating over named channels.
+- **Input Validation:** Verified malformed commands and invalid numeric arguments return descriptive error messages without crashing the server.
+
+---
+
+## Tech Stack
+
+- **Language:** Java (Core Java, OOP)
+- **Networking:** TCP/IP, `ServerSocket`, `Socket`
+- **Concurrency:** `ExecutorService`, Thread Pool, `synchronized`, `ConcurrentHashMap`
+- **Data Structures:** `HashMap`, `LinkedHashMap` (LRU), `LinkedList`, `HashSet`
+- **Storage & I/O:** Java File I/O (AOF & Snapshot Persistence)
+
+---
+
+## Project Structure
 
 ```text
-Build-Your-Own-Redis-in-Java/
-│
+build-your-own-redis-java/
 ├── src/
-│   ├── Main.java
-│   ├── RedisServer.java
-│   ├── RedisClient.java
-│   ├── ClientHandler.java
-│   ├── RedisEngine.java
-│   ├── RedisList.java
-│   ├── RedisHash.java
-│   ├── RedisSet.java
-│   ├── LRUCache.java
-│   ├── AOFManager.java
-│   ├── SnapshotManager.java
-│   ├── TransactionManager.java
-│   ├── PubSubManager.java
-│   ├── RedisCommand.java
-│   └── SetCommand.java
-│
-├── README.md
+│   ├── Main.java                 # Application entry point
+│   ├── RedisServer.java          # TCP ServerSocket & thread pool manager
+│   ├── RedisClient.java          # Interactive CLI TCP client
+│   ├── ClientHandler.java        # Per-client socket I/O handler
+│   ├── RedisEngine.java          # Core thread-safe command execution engine
+│   ├── RedisList.java            # List data structure implementation
+│   ├── RedisHash.java            # Hash data structure implementation
+│   ├── RedisSet.java             # Set data structure implementation
+│   ├── LRUCache.java             # Bounded access-order LRU cache
+│   ├── AOFManager.java           # Append-only file logger & replayer
+│   ├── SnapshotManager.java      # Snapshot serialization & recovery
+│   ├── TransactionManager.java   # MULTI/EXEC/DISCARD queue handler
+│   ├── PubSubManager.java        # Channel subscription & broadcast manager
+│   ├── RedisCommand.java         # Command parser & validator
+│   └── SetCommand.java           # Set operation helper
 ├── .gitignore
-└── ...
+└── README.md
 ```
 
 ---
 
-## ▶️ How to Run
+## How to Run
 
-### 1. Clone the repository
+### Prerequisites
+- Java Development Kit (JDK 11 or higher)
 
+### 1. Clone the Repository
 ```bash
-git clone <YOUR_REPOSITORY_URL>
-cd Build-Your-Own-Redis-in-Java
+git clone https://github.com
+cd build-your-own-redis-java
 ```
 
-### 2. Compile
-
-```powershell
-javac src\*.java
+### 2. Compile the Source Code
+```bash
+javac -d out src/*.java
 ```
 
-### 3. Start the server
-
-```powershell
-java -cp src Main
+### 3. Start the Redis Server
+```bash
+java -cp out Main
 ```
-
-Expected:
-
+**Expected Output:**
 ```text
-Mini Redis Server Started
-Port: 6379
-Waiting for clients...
+Mini Redis Server started on port 6379...
 ```
 
-### 4. Start the client
-
-Open another terminal:
-
-```powershell
-java -cp src RedisClient
+### 4. Connect Clients (Open a New Terminal)
+Open one or more separate terminals to test concurrent clients and Pub/Sub:
+```bash
+java -cp out RedisClient
 ```
-
-You should see:
-
+**Sample Session:**
 ```text
-Welcome to Mini Redis!
-redis>
-```
-
----
-
-## 💻 Example Session
-
-```text
-redis> SET name Ram
-OK
-
-redis> GET name
-Ram
-
-redis> EXISTS name
-1
-
-redis> EXPIRE name 10
-1
-
-redis> TTL name
-9
-
-redis> GET name
-(nil)
-```
-
----
-
-## ⚠️ Current Limitations
-
-This project focuses on learning Redis-like internals rather than being a production replacement for Redis.
-
-Current limitations include:
-
-* Simplified command protocol compared with the real Redis RESP protocol
-* Basic transaction implementation
-* Limited data-type persistence compared with native Redis
-* No authentication
-* No replication
-* No clustering
-* No production-grade configuration system
-* No benchmark suite comparable to Redis `redis-benchmark`
-
-These limitations define possible future improvements rather than hidden shortcomings.
-
----
-
-## 🔮 Future Improvements
-
-Potential extensions:
-
-* RESP protocol support
-* More Redis commands
-* Full persistence for all data structures
-* Better transaction semantics
-* Authentication
-* Replication
-* Connection pooling
-* Non-blocking I/O
-* Configurable thread pool
-* Automated unit/integration tests
-* JMH-based benchmarking
-* Metrics and monitoring
-
----
-
-## 📌 What I Learned
-
-Building this project helped me understand practical concepts beyond syntax:
-
-* Object-oriented design
-* TCP networking
-* Client-server architecture
-* Concurrency and thread safety
-* Thread pools
-* In-memory data stores
-* Caching strategies
-* TTL and expiration
-* File-based persistence
-* Recovery mechanisms
-* Transactions
-* Publish/Subscribe architecture
-* Command parsing
-* Data-structure design
-
----
-
-## 👨‍💻 Author
-
-**Ram Kumar**
-
-B.Tech Computer Science Engineering
-
-**Focus Areas**
-
-* Software Development
-* Data Structures & Algorithms
-* Computer Networks
-* Database Systems
-* Problem Solving
-
----
-
-## ⭐ Project Goal
-
-The goal of this project was not to reproduce the entire Redis codebase.
-
-The goal was to **build a working Redis-inspired server from first principles and understand the engineering concepts behind an in-memory data store.**
